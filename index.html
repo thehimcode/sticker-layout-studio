@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sticker Layout &amp; Cutline Studio</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect x=%222%22 y=%222%22 width=%2212%22 height=%2212%22 rx=%223%22 fill=%22none%22 stroke=%22%23d4006a%22 stroke-width=%221.5%22 stroke-dasharray=%223 2%22/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <label class="doc-name">
+      <span class="sr-only">ชื่องาน</span>
+      <input id="doc-name" type="text" maxlength="80" autocomplete="off">
+    </label>
+    <div class="tool-group">
+      <button id="undo" type="button" title="ย้อนกลับ (Ctrl+Z)">ย้อนกลับ</button>
+      <button id="redo" type="button" title="ทำซ้ำ (Ctrl+Y)">ทำซ้ำ</button>
+    </div>
+    <div class="tool-group">
+      <button id="zoom-out" type="button" aria-label="ซูมออก">−</button>
+      <output id="zoom-level" aria-live="off">100%</output>
+      <button id="zoom-in" type="button" aria-label="ซูมเข้า">+</button>
+      <button id="zoom-fit" type="button">พอดีจอ</button>
+    </div>
+    <div class="tool-group" role="group" aria-label="หน้า">
+      <button id="page-prev" type="button" aria-label="หน้าก่อน">‹</button>
+      <output id="page-label">หน้า 1/1</output>
+      <button id="page-next" type="button" aria-label="หน้าถัดไป">›</button>
+      <button id="page-add" type="button">เพิ่มหน้า</button>
+      <button id="page-del" type="button">ลบหน้า</button>
+    </div>
+    <details id="view-menu" class="view-menu">
+      <summary id="view-menu-label">มุมมอง</summary>
+      <div class="menu-pop">
+        <label class="field">แสดงผล
+          <select id="view-mode">
+            <option value="both">ภาพ + เส้นตัด</option>
+            <option value="artwork">ภาพอย่างเดียว</option>
+            <option value="cutlines">เส้นตัดอย่างเดียว</option>
+          </select>
+        </label>
+        <label class="check"><input id="toggle-guides" type="checkbox" checked> เส้นช่วย (Margin, พื้นที่ห้ามวาง)</label>
+        <label class="check"><input id="toggle-marks" type="checkbox" checked> Registration Marks</label>
+        <label class="check"><input id="toggle-grid" type="checkbox"> เส้นตาราง</label>
+        <p class="hint">ซ่อนเป็นการแสดงผลเท่านั้น ข้อมูลยังอยู่และยังส่งออกตามค่าที่เลือก</p>
+      </div>
+    </details>
+    <span class="spacer"></span>
+    <button id="export-open" class="accent" type="button">ส่งออก</button>
+    <button id="new-doc" type="button">เริ่มงานใหม่</button>
+  </header>
+
+  <main class="workspace">
+    <aside class="panel" aria-label="ไฟล์ภาพ">
+      <h2>ไฟล์ภาพ</h2>
+      <button id="add-files" class="primary" type="button">เพิ่มภาพ</button>
+      <p class="hint">ลากไฟล์ PNG หรือ JPG มาวางได้ทุกที่บนหน้าจอ</p>
+      <button id="cut-all" type="button" class="wide">สร้างเส้นตัดทุกแบบ</button>
+      <div id="job-bar" class="job-bar" hidden>
+        <p id="job-text"></p>
+        <progress id="job-progress" max="1" value="0"></progress>
+        <button id="job-cancel" type="button">ยกเลิก</button>
+      </div>
+      <input id="file-input" type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" multiple hidden>
+      <ul id="artwork-list" class="artwork-list"></ul>
+    </aside>
+
+    <section class="stage" id="stage" aria-label="พื้นที่จัดวาง">
+      <canvas id="canvas" tabindex="0" aria-label="กระดาษ ใช้ลูกศรเลื่อนวัตถุที่เลือก"></canvas>
+      <div id="drop-overlay" class="drop-overlay" hidden>
+        <p>วางไฟล์เพื่อเพิ่มลงกระดาษ</p>
+      </div>
+    </section>
+
+    <aside class="panel" aria-label="ตั้งค่า">
+      <details open>
+      <summary>กระดาษ</summary>
+      <div class="field-row">
+        <label class="field grow">ขนาด
+          <select id="paper-preset"></select>
+        </label>
+      </div>
+      <div class="segmented" role="group" aria-label="แนวกระดาษ">
+        <button id="orient-portrait" type="button">แนวตั้ง</button>
+        <button id="orient-landscape" type="button">แนวนอน</button>
+      </div>
+      <div class="field-row">
+        <label class="field">กว้าง<input id="paper-w" inputmode="decimal"></label>
+        <label class="field">สูง<input id="paper-h" inputmode="decimal"></label>
+      </div>
+      <p id="paper-note" class="hint" hidden>ขนาด A3+ ต่างกันตามเครื่องพิมพ์และผู้ผลิต ตรวจกับเครื่องที่ใช้ก่อนสั่งพิมพ์</p>
+      </details>
+
+      <details open>
+      <summary>ระยะขอบ</summary>
+      <div class="margin-box">
+        <label class="m-top"><span class="sr-only">บน</span><input id="margin-top" inputmode="decimal" aria-label="ระยะขอบบน"></label>
+        <label class="m-left"><span class="sr-only">ซ้าย</span><input id="margin-left" inputmode="decimal" aria-label="ระยะขอบซ้าย"></label>
+        <div class="m-sheet" aria-hidden="true"></div>
+        <label class="m-right"><span class="sr-only">ขวา</span><input id="margin-right" inputmode="decimal" aria-label="ระยะขอบขวา"></label>
+        <label class="m-bottom"><span class="sr-only">ล่าง</span><input id="margin-bottom" inputmode="decimal" aria-label="ระยะขอบล่าง"></label>
+      </div>
+      <label class="check link-margins"><input id="margin-link" type="checkbox"> ตั้งเท่ากันทั้งสี่ด้าน</label>
+      </details>
+
+      <details open>
+      <summary>จัดเรียงอัตโนมัติ</summary>
+      <div class="field-row">
+        <label class="field">ระยะห่าง<input id="spacing-mm" inputmode="decimal"></label>
+        <label class="field">วัดจาก
+          <select id="spacing-mode">
+            <option value="cutline">เส้นตัด</option>
+            <option value="image">ขอบภาพ</option>
+          </select>
+        </label>
+      </div>
+      <div class="field-row">
+        <label class="field">เรียงตาม
+          <select id="layout-sort">
+            <option value="size">ใหญ่ก่อน</option>
+            <option value="list">ลำดับรายการ</option>
+          </select>
+        </label>
+        <label class="field">มุมหมุนที่ลอง
+          <select id="layout-step">
+            <option value="0">ไม่หมุน</option>
+            <option value="180">ทุก 180°</option>
+            <option value="90">ทุก 90°</option>
+            <option value="45">ทุก 45°</option>
+            <option value="30">ทุก 30°</option>
+            <option value="15">ทุก 15°</option>
+          </select>
+        </label>
+      </div>
+      <label class="check"><input id="layout-pages" type="checkbox"> เพิ่มหน้าเองเมื่อไม่พอ</label>
+      <div class="field-row">
+        <button id="layout-standard" type="button">เรียงตามแถว</button>
+        <button id="layout-nest" class="accent" type="button">จัดให้ประหยัด</button>
+      </div>
+      <div id="layout-job" class="job-bar" hidden>
+        <p id="layout-job-text"></p>
+        <progress id="layout-progress" max="1" value="0"></progress>
+        <button id="layout-cancel" type="button">ยกเลิก</button>
+      </div>
+      <dl id="layout-report" class="report" hidden></dl>
+      </details>
+
+      <details>
+      <summary>พื้นที่ห้ามวาง</summary>
+      <ul id="keepout-list" class="keepout-list"></ul>
+      <button id="keepout-add" class="wide" type="button">เพิ่มพื้นที่ห้ามวาง</button>
+      </details>
+
+      <details id="marks-section">
+      <summary>Registration Marks</summary>
+      <label class="field">ชุดมาร์ค / Machine Profile
+        <select id="mark-profile"></select>
+      </label>
+      <p id="mark-profile-note" class="hint warn"></p>
+      <div id="mark-template">
+        <div class="field-row">
+          <label class="field">ขนาดมาร์ค<input id="mark-t-size" inputmode="decimal"></label>
+          <label class="field">ระยะสงวน<input id="mark-t-keepout" inputmode="decimal"></label>
+        </div>
+        <p class="hint">ระยะขอบวัดจากขอบกระดาษถึงจุดกึ่งกลางของมาร์ค (เหมือน Page Mark Margins ใน SignMaster)</p>
+        <div class="field-row">
+          <label class="field">ขอบซ้าย<input id="mark-t-left" inputmode="decimal"></label>
+          <label class="field">ขอบขวา<input id="mark-t-right" inputmode="decimal"></label>
+        </div>
+        <div class="field-row">
+          <label class="field">ขอบบน<input id="mark-t-top" inputmode="decimal"></label>
+          <label class="field">ขอบล่าง<input id="mark-t-bottom" inputmode="decimal"></label>
+        </div>
+        <div class="field-row">
+          <label class="field">ความหนาเส้น<input id="mark-t-line" inputmode="decimal"></label>
+        </div>
+      </div>
+      <div class="field-row">
+        <button id="mark-apply" class="accent" type="button">ใช้ชุดมาร์คนี้</button>
+        <button id="mark-clear" type="button">ล้างมาร์ค</button>
+      </div>
+      <p id="mark-summary" class="hint"></p>
+      <div class="field-row">
+        <label class="field">เพิ่มมาร์คเอง
+          <select id="mark-new-shape"></select>
+        </label>
+        <button id="mark-add" class="align-end" type="button">เพิ่ม</button>
+      </div>
+
+      <div id="mark-fields" hidden>
+        <h3>มาร์คที่เลือก</h3>
+        <div class="field-row">
+          <label class="field">รูป<select id="mark-shape"></select></label>
+          <label class="field">ระบาย
+            <select id="mark-paint">
+              <option value="fill">เติมสี</option>
+              <option value="stroke">เส้นขอบ</option>
+            </select>
+          </label>
+        </div>
+        <div class="field-row">
+          <label class="field">X (กึ่งกลาง)<input id="mark-x" inputmode="decimal"></label>
+          <label class="field">Y (กึ่งกลาง)<input id="mark-y" inputmode="decimal"></label>
+        </div>
+        <div class="field-row">
+          <label class="field">กว้าง<input id="mark-w" inputmode="decimal"></label>
+          <label class="field">สูง<input id="mark-h" inputmode="decimal"></label>
+        </div>
+        <div class="field-row">
+          <label class="field">หมุน<input id="mark-rot" inputmode="decimal"></label>
+          <label class="field">ความหนาเส้น<input id="mark-line" inputmode="decimal"></label>
+        </div>
+        <div class="field-row">
+          <label class="field">ระยะสงวน<input id="mark-keepout" inputmode="decimal"></label>
+          <label class="field">สี<input id="mark-color" type="color" value="#000000"></label>
+        </div>
+        <label class="check"><input id="mark-lock" type="checkbox"> ล็อกตำแหน่ง</label>
+        <div class="grid-3" role="group" aria-label="จัดแนวมาร์คกับขอบกระดาษ">
+          <button data-mark-align="left" type="button">ชิดซ้าย</button>
+          <button data-mark-align="hcenter" type="button">กึ่งกลาง</button>
+          <button data-mark-align="right" type="button">ชิดขวา</button>
+          <button data-mark-align="top" type="button">ชิดบน</button>
+          <button data-mark-align="vcenter" type="button">กลางแนวตั้ง</button>
+          <button data-mark-align="bottom" type="button">ชิดล่าง</button>
+        </div>
+        <p class="hint">ชิดขอบ: วางจุดกึ่งกลางมาร์คห่างขอบตามระยะขอบของชุดมาร์ค</p>
+        <div class="field-row">
+          <button id="mark-dup" type="button">ทำซ้ำ</button>
+          <button id="mark-del" class="danger" type="button">ลบ</button>
+        </div>
+      </div>
+
+      <h3>บันทึกเป็น Profile</h3>
+      <div class="field-row">
+        <label class="field">ชื่อ Profile<input id="mark-profile-name" type="text" maxlength="60" autocomplete="off"></label>
+      </div>
+      <div class="field-row">
+        <button id="mark-save-profile" type="button">บันทึก Profile</button>
+        <button id="mark-delete-profile" class="danger" type="button">ลบ Profile นี้</button>
+      </div>
+      </details>
+
+      <h2 id="selection-title">ชิ้นงานที่เลือก</h2>
+      <p id="no-selection" class="hint">คลิกชิ้นงานบนกระดาษ กด Shift ค้างเพื่อเลือกเพิ่ม หรือลากคลุมพื้นที่ว่าง</p>
+      <div id="selection-actions" hidden>
+      <div id="selection-fields">
+        <div class="field-row">
+          <label class="field">X<input id="sel-x" inputmode="decimal"></label>
+          <label class="field">Y<input id="sel-y" inputmode="decimal"></label>
+        </div>
+        <div class="field-row">
+          <label class="field">กว้าง<input id="sel-w" inputmode="decimal"></label>
+          <label class="field">สูง<input id="sel-h" inputmode="decimal"></label>
+        </div>
+        <label class="check"><input id="sel-lock" type="checkbox"> ล็อกสัดส่วน</label>
+        <p id="sel-dpi" class="hint"></p>
+        <label class="field">Bleed<input id="sel-bleed" inputmode="decimal"></label>
+        <p class="hint">ขนาดมีผลกับทุกชิ้นของแบบนี้</p>
+        <label class="field">หมุน<input id="sel-rot" inputmode="decimal"></label>
+      </div>
+      <div class="field-row top-gap">
+        <button id="sel-rot90" type="button">หมุน 90°</button>
+        <button id="sel-dup" type="button">ทำซ้ำ</button>
+        <button id="sel-del" class="danger" type="button">ลบ</button>
+      </div>
+      <h3 id="align-title">จัดแนว</h3>
+      <div class="grid-3" role="group" aria-labelledby="align-title">
+        <button data-align="left" type="button">ชิดซ้าย</button>
+        <button data-align="hcenter" type="button">กึ่งกลาง</button>
+        <button data-align="right" type="button">ชิดขวา</button>
+        <button data-align="top" type="button">ชิดบน</button>
+        <button data-align="vcenter" type="button">กลางแนวตั้ง</button>
+        <button data-align="bottom" type="button">ชิดล่าง</button>
+      </div>
+      <h3 id="order-title">ลำดับชั้น</h3>
+      <div class="grid-2" role="group" aria-labelledby="order-title">
+        <button data-order="front" type="button">หน้าสุด</button>
+        <button data-order="forward" type="button">ขึ้นหนึ่งชั้น</button>
+        <button data-order="back" type="button">หลังสุด</button>
+        <button data-order="backward" type="button">ลงหนึ่งชั้น</button>
+      </div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="statusbar">
+    <span id="status-paper"></span>
+    <span id="status-count"></span>
+    <span id="status-warn" class="warn"></span>
+    <button id="fix-outside" class="small" type="button" hidden>ย้ายกลับเข้าพื้นที่</button>
+    <button id="place-pending" class="small" type="button" hidden>วางชิ้นที่ค้าง</button>
+    <span class="spacer"></span>
+    <span id="status-save"></span>
+  </footer>
+
+  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+
+  <dialog id="cutline-dialog" class="cutline-dialog" aria-label="ตัวแก้เส้นตัด">
+    <div class="cut-layout">
+      <div class="cut-preview">
+        <canvas id="cut-canvas" tabindex="0" aria-label="ตัวอย่างเส้นตัด"></canvas>
+        <p id="cut-hint" class="cut-hint"></p>
+      </div>
+      <div class="cut-controls">
+        <h2 id="cut-title">เส้นตัด</h2>
+
+        <h3>วิธีแยกชิ้นงาน</h3>
+        <div class="segmented">
+          <button id="cut-mask-alpha" type="button">ความโปร่งใส</button>
+          <button id="cut-mask-color" type="button">สีพื้นหลัง</button>
+        </div>
+        <label id="cut-alpha-row" class="range">ค่าความทึบขั้นต่ำ <output id="cut-alpha-out"></output>
+          <input id="cut-alpha" type="range" min="1" max="254">
+        </label>
+        <div id="cut-color-row">
+          <div class="color-row">
+            <span id="cut-swatch" class="swatch"></span>
+            <button id="cut-color-auto" type="button">ใช้สีจากมุมภาพ</button>
+          </div>
+          <p class="hint">คลิกบนภาพเพื่อเลือกสีพื้นหลัง</p>
+          <label class="range">ช่วงสีที่นับเป็นพื้นหลัง <output id="cut-tol-out"></output>
+            <input id="cut-tol" type="range" min="0" max="128">
+          </label>
+        </div>
+
+        <h3>รูปแบบเส้น</h3>
+        <div class="segmented three">
+          <button id="cut-mode-outer" type="button">ขอบนอก</button>
+          <button id="cut-mode-merged" type="button">รวมเส้นเดียว</button>
+          <button id="cut-mode-all" type="button">ทุกเส้น</button>
+        </div>
+
+        <label class="range">ลดจุดรบกวน <output id="cut-noise-out"></output>
+          <input id="cut-noise" type="range" min="0" max="500" step="5">
+        </label>
+        <label class="range">ลดรอยหยักจากพิกเซล <output id="cut-smooth-out"></output>
+          <input id="cut-smooth" type="range" min="0" max="10">
+        </label>
+
+        <label class="field">ระยะ Offset บวกขยายออก ลบหดเข้า
+          <input id="cut-offset" inputmode="decimal">
+        </label>
+        <label class="range top-gap">ความมนของมุม (มม.) <output id="cut-corner-out"></output>
+          <input id="cut-corner" type="range" min="0" max="10" step="0.5">
+        </label>
+        <label class="range">ความเรียบของเส้น (มม.) <output id="cut-fair-out"></output>
+          <input id="cut-fair" type="range" min="0" max="3" step="0.1">
+        </label>
+
+        <h3>แก้จุดเอง</h3>
+        <label class="check"><input id="cut-edit" type="checkbox"> แก้จุดบนภาพ</label>
+        <div id="cut-edit-tools" class="field-row" hidden>
+          <button id="cut-point-del" type="button">ลบจุด</button>
+          <button id="cut-point-undo" type="button">ย้อนการแก้</button>
+          <button id="cut-point-reset" type="button">ล้างการแก้</button>
+        </div>
+
+        <div class="cut-status">
+          <div id="cut-job" hidden>
+            <progress id="cut-progress" max="1" value="0"></progress>
+            <button id="cut-cancel-job" type="button">ยกเลิกการคำนวณ</button>
+          </div>
+          <p id="cut-stats" class="hint"></p>
+          <ul id="cut-issues" class="issues"></ul>
+        </div>
+
+        <div class="cut-actions">
+        <div class="field-row">
+          <button id="cut-defaults" type="button">ค่าเริ่มต้น</button>
+          <button id="cut-svg" type="button">ดาวน์โหลด SVG</button>
+          <button id="cut-remove" class="danger" type="button">ลบเส้นตัด</button>
+        </div>
+        <div class="field-row">
+          <button id="cut-close" type="button">ปิด</button>
+          <button id="cut-apply" class="primary" type="button">ใช้เส้นตัดนี้</button>
+        </div>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="export-dialog" class="export-dialog" aria-labelledby="export-title">
+    <h2 id="export-title">ส่งออกไฟล์</h2>
+    <div class="export-body">
+      <div class="export-options">
+        <h3>ไฟล์พิมพ์ (ไม่มีเส้นตัด)</h3>
+        <label class="check"><input id="exp-png" type="checkbox"> PNG</label>
+        <label class="check"><input id="exp-jpg" type="checkbox"> JPG (พื้นขาว)</label>
+        <label class="check"><input id="exp-pdf" type="checkbox"> PDF ขนาดหน้าจริง (พื้นขาว)</label>
+        <div class="field-row">
+          <label class="field">ความละเอียด
+            <select id="exp-dpi">
+              <option value="150">150 DPI</option>
+              <option value="300">300 DPI</option>
+              <option value="600">600 DPI</option>
+            </select>
+          </label>
+          <label class="field">พื้นหลัง PNG
+            <select id="exp-png-bg">
+              <option value="transparent">โปร่งใส</option>
+              <option value="white">ขาว</option>
+            </select>
+          </label>
+        </div>
+        <label class="check"><input id="exp-marks" type="checkbox"> ใส่ Registration Marks ในไฟล์พิมพ์ (Print + Marks)</label>
+        <h3>ไฟล์ตัด</h3>
+        <label class="check"><input id="exp-cut" type="checkbox"> Cutline SVG (กลุ่ม CUT_LINES เท่านั้น)</label>
+        <label class="field">มาร์คในไฟล์ตัด
+          <select id="exp-cut-marks">
+            <option value="none">ไม่ใส่</option>
+            <option value="reference">ใส่เป็นชั้นอ้างอิง (ไม่ใช่เส้นตัด)</option>
+          </select>
+        </label>
+        <label class="check top-gap"><input id="exp-combined" type="checkbox"> Combined SVG (ARTWORK / CUT_LINES / REG_MARKS แยกกลุ่ม)</label>
+        <p class="hint">หลายหน้าหรือหลายไฟล์จะรวมเป็น Zip ชื่อไฟล์เป็น ชื่องาน_p01_ชนิด ทุกไฟล์ใช้ตำแหน่งชุดเดียวกับที่เห็นบนจอ ไม่จัดเรียงใหม่</p>
+      </div>
+      <div class="export-check">
+        <h3>Preflight</h3>
+        <ul id="exp-preflight" class="preflight"></ul>
+        <label id="exp-override-row" class="check" hidden><input id="exp-override" type="checkbox"> ตรวจแล้ว ส่งออกทั้งที่มีปัญหา</label>
+        <div id="exp-job" class="job-bar" hidden>
+          <p id="exp-job-text"></p>
+          <progress id="exp-progress" max="1" value="0"></progress>
+        </div>
+      </div>
+    </div>
+    <div class="field-row export-actions">
+      <button id="exp-close" type="button">ปิด</button>
+      <button id="exp-cancel" type="button" hidden>ยกเลิก</button>
+      <button id="exp-run" class="accent" type="button">ส่งออก</button>
+    </div>
+  </dialog>
+
+  <dialog id="confirm-new">
+    <form method="dialog">
+      <p>เริ่มงานใหม่แล้วงานปัจจุบันจะถูกลบและย้อนกลับไม่ได้</p>
+      <div class="field-row">
+        <button value="cancel">ยกเลิก</button>
+        <button value="ok" class="danger">ลบและเริ่มงานใหม่</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
